@@ -4,11 +4,79 @@ const app = express()
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
+// const jwt = require("jsonwebtoken");
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./local-chef-bazaar-9fed2-firebase-adminsdk-fbsvc-aa7e96a24c.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
 
 const port = process.env.PORT || 3000
 
 app.use(express.json())
 app.use(cors())
+
+//  Verify JWT ------------------------------
+// const verifyJWT = async(req, res, next) => {
+//   const authHeader = req.headers.authorization;
+
+//   if (!authHeader) {
+//     return res.status(401).send({ message: "Unauthorized" });
+//   }
+//   try{
+//   const token = authHeader.split(" ")[1];
+//   const decoded = await admin.auth().verifyIdToken(token)
+//   req.decoded_email = decoded.email
+//    next();
+//   }
+//   catch(err){
+//     res.status(401).send({message:'unauthorized acess'})
+
+//   }
+
+
+
+// };
+
+
+// const verifyJWT = async (req, res, next) => {
+//   const authHeader = req.headers.authorization;
+//   console.log(authHeader)
+//   if (!authHeader) {
+//     return res.status(401).send({ message: "Unauthorized" });
+//   }
+
+//   try {
+//     const token = authHeader.split(" ")[1];
+//     const decoded = await admin.auth().verifyIdToken(token);
+
+//     // Get user from DB
+//     const user = await usersCollection.findOne({ email: decoded.email });
+//     if (!user) return res.status(403).send({ message: "Forbidden: User not found" });
+
+//     req.user = user; // <-- store the user info for later middleware
+//     next();
+//   } catch (err) {
+//     console.error(err);
+//     res.status(401).send({ message: "Unauthorized access" });
+//   }
+// };
+
+
+//  Verify Admin ------------------------------
+// const verifyAdmin = (req, res, next) => {
+//   const role = req.user?.role;
+
+//   if (role !== "admin") {
+//     return res.status(403).send({ message: "Forbidden: Admin only" });
+//   }
+
+//   next();
+// };
 
 // ----------------------------
 // MongoDB Connection
@@ -41,6 +109,44 @@ async function run() {
     const roleRequestsCollection = db.collection("role_requests");
 
 
+    // vefiry jwt
+    // ========================
+    const verifyJWT = async (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      // console.log(authHeader)
+      if (!authHeader) {
+        return res.status(401).send({ message: "Unauthorized" });
+      }
+
+      try {
+        const token = authHeader.split(" ")[1];
+        const decoded = await admin.auth().verifyIdToken(token);
+
+        // Get user from DB
+        const user = await usersCollection.findOne({ email: decoded.email });
+        if (!user) return res.status(403).send({ message: "Forbidden: User not found" });
+
+        req.user = user; // <-- store the user info for later middleware
+        next();
+      } catch (err) {
+        console.error(err);
+        res.status(401).send({ message: "Unauthorized access" });
+      }
+    };
+    // verify admin
+    // ===========================
+    const verifyAdmin = (req, res, next) => {
+      const role = req.user?.role;
+
+      if (role !== "admin") {
+        return res.status(403).send({ message: "Forbidden: Admin only" });
+      }
+
+      next();
+    };
+
+
+
 
     // Add user when they register or first login
     //========================================
@@ -64,15 +170,79 @@ async function run() {
       }
     });
 
+    // GET all users (Admin only)
+    app.get("/admin/users", verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        const users = await usersCollection.find().toArray();
+        res.send(users);
+      } catch (err) {
+        res.status(500).send({ error: "Failed to fetch users" });
+      }
+    });
+
+    // PATCH make user fraud
+    app.patch("/admin/users/fraud/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+
+      try {
+        const user = await usersCollection.findOne({ _id: new ObjectId(id) });
+        if (!user) return res.status(404).send({ error: "User not found" });
+
+        if (user.role === "admin") {
+          return res.status(403).send({ error: "Cannot make admin fraud" });
+        }
+
+        if (user.status === "fraud") {
+          return res.status(400).send({ error: "User is already fraud" });
+        }
+
+        await usersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status: "fraud" } }
+        );
+
+        res.send({ success: true, message: "User marked as fraud" });
+      } catch (err) {
+        res.status(500).send({ error: "Failed to update user status" });
+      }
+    });
+
+
 
     // ----------------------------
     // 📌 POST Meals
     // ----------------------------
-    app.post("/meals", async (req, res) => {
-      const mealData = req.body;
-      const result = await mealsCollection.insertMany(mealData);
-      res.send(result);
+    // app.post("/meals", async (req, res) => {
+    //   const mealData = req.body;
+    //   const result = await mealsCollection.insertMany(mealData);
+    //   res.send(result);
+    // });
+
+    // app.post("/meals", async (req, res) => {
+    //   try {
+    //     const meal = req.body;
+    //     const result = await mealsCollection.insertOne(meal);
+    //     res.send(result);
+    //   } catch (err) {
+    //     res.status(500).send({ error: "Failed to create meal" });
+    //   }
+    // });
+    app.post("/meals", verifyJWT, async (req, res) => {
+      try {
+        const user = await usersCollection.findOne({ email: req.user.email });
+        if (user.status === "fraud") {
+          return res.status(403).send({ message: "Fraud users cannot create meals" });
+        }
+
+        const meal = req.body;
+        meal.userEmail = req.user.email; // associate meal with chef
+        const result = await mealsCollection.insertOne(meal);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ error: "Failed to create meal" });
+      }
     });
+
 
     // ----------------------------
     // 📌 GET All Meals
@@ -85,10 +255,28 @@ async function run() {
     // ----------------------------
     // 📌 GET Single Meal by ID
     // ----------------------------
-    app.get("/meals/:id", async (req, res) => {
-      const { id } = req.params;
+    // app.get("/meals/:id", async (req, res) => {
+    //   const { id } = req.params;
 
+    //   try {
+    //     const meal = await mealsCollection.findOne({ _id: new ObjectId(id) });
+
+    //     if (!meal) {
+    //       return res.status(404).send({ error: "Meal not found" });
+    //     }
+
+    //     res.send(meal);
+
+    //   } catch (error) {
+    //     console.log(error);
+    //     res.status(500).send({ error: "Invalid Meal ID" });
+    //   }
+    // });
+
+    // Single route for fetching a meal by ID
+    app.get("/meals/:id", async (req, res) => {
       try {
+        const { id } = req.params;
         const meal = await mealsCollection.findOne({ _id: new ObjectId(id) });
 
         if (!meal) {
@@ -96,12 +284,58 @@ async function run() {
         }
 
         res.send(meal);
-
-      } catch (error) {
-        console.log(error);
+      } catch (err) {
+        console.log(err);
         res.status(500).send({ error: "Invalid Meal ID" });
       }
     });
+
+
+    //  get meals by chef email paermas
+    // =========================
+
+    app.get("/meals/chef/:email", async (req, res) => {
+      const meals = await mealsCollection.find({ userEmail: req.params.email }).toArray();
+      res.send(meals);
+    });
+
+
+    //  get meals by chef email
+    // =========================
+    app.get("/meals", async (req, res) => {
+      const email = req.query.email;
+
+      const result = await mealsCollection
+        .find({ userEmail: email })
+        .toArray();
+
+      res.send(result);
+    });
+
+    // delete meals
+    // =============================
+
+    app.delete("/meals/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await mealsCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+    // update meal api
+    // ==================
+    app.put("/meals/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedMeal = req.body;
+
+      const result = await mealsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updatedMeal }
+      );
+
+      res.send(result);
+    });
+
+
 
     // =================================================================
     // ⭐⭐ REVIEWS APIs ⭐⭐
@@ -172,10 +406,44 @@ async function run() {
       res.send(items);
     });
 
-    // POST: Create a new order
-    app.post("/orders", async (req, res) => {
+    // delete favourite
+    // ===========================
+
+    app.delete("/favorites/:id", async (req, res) => {
+      const id = req.params.id;
+
       try {
+        const result = await favoritesCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send({ success: result.deletedCount > 0 });
+      } catch (err) {
+        res.status(500).send({ error: "Failed to delete favorite" });
+      }
+    });
+
+
+    // POST: Create a new order
+    // app.post("/orders", async (req, res) => {
+    //   try {
+    //     const order = req.body;
+    //     order.orderStatus = "pending";
+    //     order.orderTime = new Date();
+
+    //     const result = await ordersCollection.insertOne(order);
+    //     res.send({ success: true, orderId: result.insertedId });
+    //   } catch (error) {
+    //     console.log(error);
+    //     res.status(500).send({ success: false, message: "Failed to place order" });
+    //   }
+    // });
+    app.post("/orders", verifyJWT, async (req, res) => {
+      try {
+        const user = await usersCollection.findOne({ email: req.user.email });
+        if (user.status === "fraud") {
+          return res.status(403).send({ message: "Fraud users cannot place orders" });
+        }
+
         const order = req.body;
+        order.userEmail = req.user.email;
         order.orderStatus = "pending";
         order.orderTime = new Date();
 
@@ -186,6 +454,7 @@ async function run() {
         res.status(500).send({ success: false, message: "Failed to place order" });
       }
     });
+
 
     // verfy-paymetnt
     // ===========================
@@ -222,17 +491,32 @@ async function run() {
     });
 
     // GET pending orders for a chef
+    // app.get("/chef-orders/:chefId", async (req, res) => {
+    //   const { chefId } = req.params;
+    //   console.log("Chef ID received:", chefId);
+
+    //   const orders = await ordersCollection
+    //     .find({ chefId: chefId, orderStatus: "pending" }) // exact match
+    //     .toArray();
+
+    //   console.log("Orders found:", orders);
+    //   res.send(orders);
+    // });
+
+    // GET all orders for a chef (not only pending)
     app.get("/chef-orders/:chefId", async (req, res) => {
       const { chefId } = req.params;
       console.log("Chef ID received:", chefId);
 
       const orders = await ordersCollection
-        .find({ chefId: chefId, orderStatus: "pending" }) // exact match
+        .find({ chefId: chefId })  // ← removed orderStatus filter
+        .sort({ orderTime: -1 })   // newest first
         .toArray();
 
       console.log("Orders found:", orders);
       res.send(orders);
     });
+
 
     // PATCH /orders/:id/paid
     // ----------------------------
@@ -378,49 +662,100 @@ async function run() {
 
 
     // PATCH approve or reject request
-    app.patch("/role-request/:id", async (req, res) => {
-      const { id } = req.params;       // role request ID (string)
-      const { action } = req.body;     // "approve" or "reject"
+    // app.patch("/role-request/:id", async (req, res) => {
+    //   const { id } = req.params;       // role request ID (string)
+    //   const { action } = req.body;     // "approve" or "reject"
 
-      // Find the request
-      const request = await roleRequestsCollection.findOne({ _id: id });
-      if (!request) return res.status(404).send({ error: "Request not found" });
+    //   // Find the request
+    //   const request = await roleRequestsCollection.findOne({ _id: id });
+    //   if (!request) return res.status(404).send({ error: "Request not found" });
 
-      // Approve logic
-      if (action === "approve") {
-        const updateData = { role: request.requestType };
+    //   // Approve logic
+    //   if (action === "approve") {
+    //     const updateData = { role: request.requestType };
 
-        // If the request type is 'chef', generate a chefId
-        if (request.requestType === "chef") {
-          // You can generate a unique chefId (example: "CH-xxx")
-          const lastChef = await usersCollection
-            .find({ chefId: { $exists: true } })
-            .sort({ chefId: -1 })
-            .limit(1)
-            .toArray();
+    //     // If the request type is 'chef', generate a chefId
+    //     if (request.requestType === "chef") {
+    //       // You can generate a unique chefId (example: "CH-xxx")
+    //       const lastChef = await usersCollection
+    //         .find({ chefId: { $exists: true } })
+    //         .sort({ chefId: -1 })
+    //         .limit(1)
+    //         .toArray();
 
-          let newChefId = "CH-101"; // default starting ID
-          if (lastChef.length > 0) {
-            // increment last chefId number
-            const lastIdNum = parseInt(lastChef[0].chefId.split("-")[1]);
-            newChefId = `CH-${lastIdNum + 1}`;
-          }
+    //       let newChefId = "CH-101"; // default starting ID
+    //       if (lastChef.length > 0) {
+    //         // increment last chefId number
+    //         const lastIdNum = parseInt(lastChef[0].chefId.split("-")[1]);
+    //         newChefId = `CH-${lastIdNum + 1}`;
+    //       }
 
-          updateData.chefId = newChefId;
+    //       updateData.chefId = newChefId;
+    //     }
+
+    //     // Update user's role and chefId if applicable
+    //     await usersCollection.updateOne(
+    //       { email: request.userEmail },
+    //       { $set: updateData }
+    //     );
+    //   }
+
+    //   // Delete the role request after action
+    //   await roleRequestsCollection.deleteOne({ _id: id });
+
+    //   res.send({ success: true });
+    // });
+
+    // PATCH approve or reject request
+    app.patch("/role-request/:id", verifyJWT, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { action } = req.body;
+
+        console.log("PATCH received ID:", id);
+
+        // Since your DB uses string IDs, always match by string
+        const query = { _id: id };
+
+        const request = await roleRequestsCollection.findOne(query);
+
+        if (!request) {
+          return res.status(404).send({ error: "Request not found" });
         }
 
-        // Update user's role and chefId if applicable
-        await usersCollection.updateOne(
-          { email: request.userEmail },
-          { $set: updateData }
-        );
+        if (action === "approve") {
+          const updateData = {};
+
+          if (request.requestType === "chef") {
+            updateData.role = "chef";
+            updateData.chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
+          } else if (request.requestType === "admin") {
+            updateData.role = "admin";
+          }
+
+          await usersCollection.updateOne(
+            { email: request.userEmail },
+            { $set: updateData }
+          );
+
+          await roleRequestsCollection.updateOne(query, {
+            $set: { requestStatus: "approved" },
+          });
+        }
+
+        if (action === "reject") {
+          await roleRequestsCollection.updateOne(query, {
+            $set: { requestStatus: "rejected" },
+          });
+        }
+
+        res.send({ success: true, action });
+      } catch (error) {
+        console.error("PATCH /role-request ERROR:", error);
+        res.status(500).send({ error: "Internal server error" });
       }
-
-      // Delete the role request after action
-      await roleRequestsCollection.deleteOne({ _id: id });
-
-      res.send({ success: true });
     });
+
 
     // GET reviews for a specific user
     app.get("/reviews/user/:email", async (req, res) => {
@@ -462,6 +797,8 @@ async function run() {
         res.status(500).send({ error: "Failed to update review" });
       }
     });
+
+    // MY fafvourite
 
 
 
