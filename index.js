@@ -247,10 +247,37 @@ async function run() {
     // ----------------------------
     // 📌 GET All Meals
     // ----------------------------
+    // app.get("/meals", async (req, res) => {
+    //   const meals = await mealsCollection.find().toArray();
+    //   res.send(meals);
+    // });
+    // GET /meals?page=1&limit=10
     app.get("/meals", async (req, res) => {
-      const meals = await mealsCollection.find().toArray();
-      res.send(meals);
+      try {
+        const page = parseInt(req.query.page) || 1; // default page 1
+        const limit = parseInt(req.query.limit) || 10; // default 10 items per page
+        const skip = (page - 1) * limit;
+
+        const totalMeals = await mealsCollection.countDocuments();
+        const meals = await mealsCollection
+          .find()
+          .skip(skip)
+          .limit(limit)
+          .toArray();
+
+        const totalPages = Math.ceil(totalMeals / limit);
+
+        res.send({
+          meals,
+          currentPage: page,
+          totalPages,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Failed to fetch meals" });
+      }
     });
+
 
     // ----------------------------
     // 📌 GET Single Meal by ID
