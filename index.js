@@ -368,10 +368,30 @@ async function run() {
     // ⭐⭐ REVIEWS APIs ⭐⭐
     // =================================================================
 
+    // Get top 5 reviews sorted by rating
+    app.get("/reviews/top", async (req, res) => {
+      console.log('hit from /reviews/top');
+
+      try {
+        const topReviews = await reviewsCollection
+          .find()
+          .sort({ rating: -1 }) // MongoDB sorts by rating directly
+          .limit(5)             // Only get top 5
+          .toArray();
+
+        res.send(topReviews);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Failed to fetch top reviews" });
+      }
+    });
+
+
     // ----------------------------
     // 📌 GET Reviews for a Meal
     // ----------------------------
     app.get("/reviews/:mealId", async (req, res) => {
+      console.log('hit from /reviews/:mealId')
       const mealId = req.params.mealId;
 
       const reviews = await reviewsCollection
@@ -385,14 +405,66 @@ async function run() {
     // ----------------------------
     // 📌 POST Review for a Meal
     // ----------------------------
+    // app.post("/reviews", async (req, res) => {
+    //   const reviewData = req.body;  // full object from frontend
+
+    //   reviewData.date = new Date(); // Auto timestamp
+
+    //   const result = await reviewsCollection.insertOne(reviewData);
+    //   res.send(result);
+    // });
+    // app.post("/reviews", async (req, res) => {
+    //   const reviewData = req.body;
+
+    //   // Force rating to always be a proper number
+    //   reviewData.rating = Number(reviewData.rating);
+
+    //   // Ensure no weird BSON type is saved
+    //   if (isNaN(reviewData.rating)) {
+    //     return res.status(400).send({ error: "Invalid rating" });
+    //   }
+
+    //   // Always save date properly
+    //   reviewData.date = new Date();
+
+    //   const result = await reviewsCollection.insertOne(reviewData);
+    //   res.send(result);
+    // });
     app.post("/reviews", async (req, res) => {
-      const reviewData = req.body;  // full object from frontend
+      const reviewData = req.body;
 
-      reviewData.date = new Date(); // Auto timestamp
+      // Extract values cleanly (optional but clean)
+      const {
+        reviewerName,
+        reviewerImage,
+        userEmail,
+        foodId,
+        foodName,  //  NEW FIELD
+        rating,
+        comment,
+      } = reviewData;
 
-      const result = await reviewsCollection.insertOne(reviewData);
+      // Make sure rating is always stored as a number
+      const numericRating = Number(rating);
+      if (isNaN(numericRating)) {
+        return res.status(400).send({ error: "Invalid rating" });
+      }
+
+      const finalReview = {
+        reviewerName,
+        reviewerImage,
+        userEmail,
+        foodId,
+        foodName,        // ✅ Save food name here
+        comment,
+        rating: numericRating, // store as number always
+        date: new Date(),      // Always store proper date
+      };
+
+      const result = await reviewsCollection.insertOne(finalReview);
       res.send(result);
     });
+
 
     // =================================================================
     // ⭐⭐ FAVORITES APIs ⭐⭐
@@ -786,6 +858,7 @@ async function run() {
 
     // GET reviews for a specific user
     app.get("/reviews/user/:email", async (req, res) => {
+      console.log('hit from /reviews/user/:email')
       const { email } = req.params;
       try {
         const reviews = await reviewsCollection
@@ -824,6 +897,10 @@ async function run() {
         res.status(500).send({ error: "Failed to update review" });
       }
     });
+
+
+
+
 
     // MY fafvourite
     // ===============================
