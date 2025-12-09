@@ -799,6 +799,35 @@ async function run() {
     });
 
     // MY fafvourite
+    // ===============================
+    // ⭐ ADMIN PLATFORM STATISTICS ⭐
+    // ===============================
+    app.get("/admin/platform-stats", verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        // 1️⃣ Total Users
+        const totalUsers = await usersCollection.countDocuments();
+
+        // 2️⃣ Total Payment Amount (only paid orders)
+        const paidOrders = await ordersCollection.find({ paymentStatus: "paid" }).toArray();
+        const totalPaymentAmount = paidOrders.reduce((sum, o) => sum + (o.price || 0), 0);
+
+        // 3️⃣ Orders Pending
+        const ordersPending = await ordersCollection.countDocuments({ orderStatus: "pending" });
+
+        // 4️⃣ Orders Delivered (accepted → delivered)
+        const ordersDelivered = await ordersCollection.countDocuments({ orderStatus: "delivered" });
+
+        res.send({
+          totalUsers,
+          totalPaymentAmount,
+          ordersPending,
+          ordersDelivered,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Failed to load admin stats" });
+      }
+    });
 
 
 
