@@ -369,14 +369,30 @@ async function run() {
     // =================================================================
 
     // Get top 5 reviews sorted by rating
+    // app.get("/reviews/top", async (req, res) => {
+    //   console.log('hit from /reviews/top');
+
+    //   try {
+    //     const topReviews = await reviewsCollection
+    //       .find()
+    //       .sort({ rating: -1 }) // MongoDB sorts by rating directly
+    //       .limit(5)             // Only get top 5
+    //       .toArray();
+
+    //     res.send(topReviews);
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send({ error: "Failed to fetch top reviews" });
+    //   }
+    // });
     app.get("/reviews/top", async (req, res) => {
-      console.log('hit from /reviews/top');
+      console.log("hit from /reviews/top");
 
       try {
         const topReviews = await reviewsCollection
-          .find()
-          .sort({ rating: -1 }) // MongoDB sorts by rating directly
-          .limit(5)             // Only get top 5
+          .find({}, { projection: { foodName: 1, reviewerName: 1, reviewerImage: 1, rating: 1, comment: 1, date: 1 } })
+          .sort({ rating: -1 })
+          .limit(5)
           .toArray();
 
         res.send(topReviews);
@@ -385,6 +401,7 @@ async function run() {
         res.status(500).send({ error: "Failed to fetch top reviews" });
       }
     });
+
 
 
     // ----------------------------
