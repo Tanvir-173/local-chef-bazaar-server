@@ -210,7 +210,7 @@ async function run() {
 
 
     // ----------------------------
-    // 📌 POST Meals
+    //  POST Meals
     // ----------------------------
     // app.post("/meals", async (req, res) => {
     //   const mealData = req.body;
@@ -245,7 +245,7 @@ async function run() {
 
 
     // ----------------------------
-    // 📌 GET All Meals
+    //  GET All Meals
     // ----------------------------
     // app.get("/meals", async (req, res) => {
     //   const meals = await mealsCollection.find().toArray();
@@ -280,7 +280,7 @@ async function run() {
 
 
     // ----------------------------
-    // 📌 GET Single Meal by ID
+    //  GET Single Meal by ID
     // ----------------------------
     // app.get("/meals/:id", async (req, res) => {
     //   const { id } = req.params;
@@ -365,7 +365,7 @@ async function run() {
 
 
     // =================================================================
-    // ⭐⭐ REVIEWS APIs ⭐⭐
+    // REVIEWS APIs 
     // =================================================================
 
     // Get top 5 reviews sorted by rating
@@ -405,7 +405,7 @@ async function run() {
 
 
     // ----------------------------
-    // 📌 GET Reviews for a Meal
+    //  GET Reviews for a Meal
     // ----------------------------
     app.get("/reviews/:mealId", async (req, res) => {
       console.log('hit from /reviews/:mealId')
@@ -420,7 +420,7 @@ async function run() {
     });
 
     // ----------------------------
-    // 📌 POST Review for a Meal
+    //  POST Review for a Meal
     // ----------------------------
     // app.post("/reviews", async (req, res) => {
     //   const reviewData = req.body;  // full object from frontend
@@ -472,7 +472,7 @@ async function run() {
         reviewerImage,
         userEmail,
         foodId,
-        foodName,        // ✅ Save food name here
+        foodName,        //  Save food name here
         comment,
         rating: numericRating, // store as number always
         date: new Date(),      // Always store proper date
@@ -484,11 +484,11 @@ async function run() {
 
 
     // =================================================================
-    // ⭐⭐ FAVORITES APIs ⭐⭐
+    //  FAVORITES APIs 
     // =================================================================
 
     // ----------------------------
-    // 📌 POST Add to Favorites
+    //  POST Add to Favorites
     // ----------------------------
     app.post("/favorites", async (req, res) => {
       const favorite = req.body;
@@ -509,7 +509,7 @@ async function run() {
     });
 
     // ----------------------------
-    // 📌 GET Favorites by User Email
+    //  GET Favorites by User Email
     // ----------------------------
     app.get("/favorites/:email", async (req, res) => {
       const email = req.params.email;
@@ -688,7 +688,7 @@ async function run() {
 
 
     // ----------------------------
-    // 📌 GET API: Get user info by email
+    //  GET API: Get user info by email
     // ----------------------------
     app.get("/users/:email", async (req, res) => {
       const { email } = req.params;
@@ -702,7 +702,7 @@ async function run() {
     });
 
     // ----------------------------
-    // 📌 POST API: Send role upgrade request
+    //  POST API: Send role upgrade request
     // ----------------------------
     app.post("/role-request", async (req, res) => {
       const requestData = req.body;
@@ -921,7 +921,7 @@ async function run() {
 
     // MY fafvourite
     // ===============================
-    // ⭐ ADMIN PLATFORM STATISTICS ⭐
+    //  ADMIN PLATFORM STATISTICS 
     // ===============================
     app.get("/admin/platform-stats", verifyJWT, verifyAdmin, async (req, res) => {
       try {
