@@ -7,7 +7,11 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 // const jwt = require("jsonwebtoken");
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./local-chef-bazaar-9fed2-firebase-adminsdk-fbsvc-aa7e96a24c.json");
+// const serviceAccount = require("./local-chef-bazaar-9fed2-firebase-adminsdk-fbsvc-aa7e96a24c.json");
+// const serviceAccount = require("./firebase-admin-key.json");
+
+ const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+ const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -98,7 +102,7 @@ const client = new MongoClient(uri, {
 // ----------------------------
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("localchefbazaar_db");
     const mealsCollection = db.collection("meals");
@@ -150,7 +154,7 @@ async function run() {
 
     // Add user when they register or first login
     //========================================
-    app.post("/users", async (req, res) => {
+    app.post("/users",verifyJWT, async (req, res) => {
       const user = req.body; // { name, email, photoURL, role? }
       try {
         // Check if user already exists
@@ -321,7 +325,7 @@ async function run() {
     //  get meals by chef email paermas
     // =========================
 
-    app.get("/meals/chef/:email", async (req, res) => {
+    app.get("/meals/chef/:email",verifyJWT, async (req, res) => {
       const meals = await mealsCollection.find({ userEmail: req.params.email }).toArray();
       res.send(meals);
     });
@@ -342,7 +346,7 @@ async function run() {
     // delete meals
     // =============================
 
-    app.delete("/meals/:id", async (req, res) => {
+    app.delete("/meals/:id",verifyJWT, async (req, res) => {
       const id = req.params.id;
       const result = await mealsCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
@@ -350,7 +354,7 @@ async function run() {
 
     // update meal api
     // ==================
-    app.put("/meals/:id", async (req, res) => {
+    app.put("/meals/:id",verifyJWT, async (req, res) => {
       const id = req.params.id;
       const updatedMeal = req.body;
 
@@ -386,7 +390,7 @@ async function run() {
     //   }
     // });
     app.get("/reviews/top", async (req, res) => {
-      console.log("hit from /reviews/top");
+      // console.log("hit from /reviews/top");
 
       try {
         const topReviews = await reviewsCollection
@@ -408,7 +412,7 @@ async function run() {
     //  GET Reviews for a Meal
     // ----------------------------
     app.get("/reviews/:mealId", async (req, res) => {
-      console.log('hit from /reviews/:mealId')
+      // console.log('hit from /reviews/:mealId')
       const mealId = req.params.mealId;
 
       const reviews = await reviewsCollection
@@ -447,7 +451,7 @@ async function run() {
     //   const result = await reviewsCollection.insertOne(reviewData);
     //   res.send(result);
     // });
-    app.post("/reviews", async (req, res) => {
+    app.post("/reviews",verifyJWT, async (req, res) => {
       const reviewData = req.body;
 
       // Extract values cleanly (optional but clean)
@@ -490,7 +494,7 @@ async function run() {
     // ----------------------------
     //  POST Add to Favorites
     // ----------------------------
-    app.post("/favorites", async (req, res) => {
+    app.post("/favorites",verifyJWT, async (req, res) => {
       const favorite = req.body;
 
       const exists = await favoritesCollection.findOne({
@@ -525,7 +529,7 @@ async function run() {
     // delete favourite
     // ===========================
 
-    app.delete("/favorites/:id", async (req, res) => {
+    app.delete("/favorites/:id", verifyJWT,async (req, res) => {
       const id = req.params.id;
 
       try {
@@ -563,6 +567,10 @@ async function run() {
         order.orderStatus = "pending";
         order.orderTime = new Date();
 
+        if (order.chefName) {
+          order.chefName = order.chefName;
+        }
+
         const result = await ordersCollection.insertOne(order);
         res.send({ success: true, orderId: result.insertedId });
       } catch (error) {
@@ -575,7 +583,7 @@ async function run() {
     // verfy-paymetnt
     // ===========================
     // PATCH order payment status
-    app.patch("/orders/:id/paid", async (req, res) => {
+    app.patch("/orders/:id/paid",verifyJWT, async (req, res) => {
       const { id } = req.params; // order _id
       const { sessionId } = req.body; // optional, from Stripe
 
@@ -600,7 +608,7 @@ async function run() {
 
 
     // GET: Orders by user email
-    app.get("/orders/:email", async (req, res) => {
+    app.get("/orders/:email",verifyJWT, async (req, res) => {
       const email = req.params.email;
       const orders = await ordersCollection.find({ userEmail: email }).toArray();
       res.send(orders);
@@ -620,49 +628,75 @@ async function run() {
     // });
 
     // GET all orders for a chef (not only pending)
-    app.get("/chef-orders/:chefId", async (req, res) => {
+    app.get("/chef-orders/:chefId",verifyJWT, async (req, res) => {
       const { chefId } = req.params;
-      console.log("Chef ID received:", chefId);
+      // console.log("Chef ID received:", chefId);
 
       const orders = await ordersCollection
         .find({ chefId: chefId })  // ← removed orderStatus filter
         .sort({ orderTime: -1 })   // newest first
         .toArray();
 
-      console.log("Orders found:", orders);
+      // console.log("Orders found:", orders);
       res.send(orders);
     });
 
 
     // PATCH /orders/:id/paid
     // ----------------------------
-    app.patch("/orders/:id/paid", async (req, res) => {
-      const { id } = req.params;
+    // app.patch("/orders/:id/paid", async (req, res) => {
+    //   const { id } = req.params;
 
-      try {
-        const result = await ordersCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { paymentStatus: "paid" } }
-        );
+    //   try {
+    //     const result = await ordersCollection.updateOne(
+    //       { _id: new ObjectId(id) },
+    //       { $set: { paymentStatus: "paid" } }
+    //     );
 
-        res.send({ success: true, result });
-      } catch (error) {
-        console.log(error);
-        res.status(500).send({ success: false, message: "Failed to mark order as paid" });
-      }
-    });
+    //     res.send({ success: true, result });
+    //   } catch (error) {
+    //     console.log(error);
+    //     res.status(500).send({ success: false, message: "Failed to mark order as paid" });
+    //   }
+    // });
 
 
 
     // PATCH order status by chef
-    app.patch("/orders/:id", async (req, res) => {
+    // app.patch("/orders/:id", async (req, res) => {
+    //   const { id } = req.params;
+    //   const { orderStatus } = req.body; // accepted / rejected
+
+    //   try {
+    //     const result = await ordersCollection.updateOne(
+    //       { _id: new ObjectId(id) },
+    //       { $set: { orderStatus } }
+    //     );
+
+    //     res.send({ success: true, result });
+    //   } catch (error) {
+    //     console.log(error);
+    //     res.status(500).send({ success: false, message: "Failed to update order" });
+    //   }
+    // });
+
+    app.patch("/orders/:id",verifyJWT, async (req, res) => {
+      console.log('"/orders/:id"')
       const { id } = req.params;
-      const { orderStatus } = req.body; // accepted / rejected
+      const { orderStatus, deliveryTime } = req.body;
+      console.log(req.body)
 
       try {
+        const updateFields = { orderStatus };
+
+        // If deliveryTime exists → save it
+        if (deliveryTime) {
+          updateFields.deliveryTime = deliveryTime;
+        }
+
         const result = await ordersCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { orderStatus } }
+          { $set: updateFields }
         );
 
         res.send({ success: true, result });
@@ -671,6 +705,7 @@ async function run() {
         res.status(500).send({ success: false, message: "Failed to update order" });
       }
     });
+
 
     //user emaile role
     //=========================
@@ -751,7 +786,7 @@ async function run() {
     //       res.send({ url: session.url})
 
     // });
-    app.post("/create-checkout-session", async (req, res) => {
+    app.post("/create-checkout-session",verifyJWT, async (req, res) => {
       const { price, orderId, userEmail } = req.body;
       const amount = parseInt(price) * 100; // convert to cents
 
@@ -828,7 +863,7 @@ async function run() {
         const { id } = req.params;
         const { action } = req.body;
 
-        console.log("PATCH received ID:", id);
+        // console.log("PATCH received ID:", id);
 
         // Since your DB uses string IDs, always match by string
         const query = { _id: id };
@@ -875,7 +910,7 @@ async function run() {
 
     // GET reviews for a specific user
     app.get("/reviews/user/:email", async (req, res) => {
-      console.log('hit from /reviews/user/:email')
+      // console.log('hit from /reviews/user/:email')
       const { email } = req.params;
       try {
         const reviews = await reviewsCollection
@@ -900,7 +935,7 @@ async function run() {
     });
 
     // PATCH review by _id
-    app.patch("/reviews/:id", async (req, res) => {
+    app.patch("/reviews/:id",verifyJWT, async (req, res) => {
       const { id } = req.params;
       const { rating, comment } = req.body;
 
