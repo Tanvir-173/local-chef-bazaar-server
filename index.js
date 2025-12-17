@@ -741,26 +741,70 @@ async function run() {
     // ----------------------------
     //  POST API: Send role upgrade request
     // ----------------------------
+    // app.post("/role-request", async (req, res) => {
+    //   const requestData = req.body;
+    //   try {
+    //     requestData.requestStatus = "pending";
+    //     requestData.requestTime = new Date();
+    //     console.log(requestData)
+
+    //     const result = await roleRequestsCollection.insertOne(requestData);
+    //     res.send({ success: true, data: result });
+    //   } catch (error) {
+    //     console.log(error)
+    //     res.status(500).send({ error: "Failed to submit request" });
+    //   }
+    // });
     app.post("/role-request", async (req, res) => {
-      const requestData = req.body;
       try {
-        requestData.requestStatus = "pending";
-        requestData.requestTime = new Date();
-        console.log(requestData)
+        const { userEmail, userName, requestType } = req.body;
+
+        //  Check if request already exists
+        const existingRequest = await roleRequestsCollection.findOne({ userEmail });
+
+        if (existingRequest) {
+          return res.status(409).send({
+            success: false,
+            message: "You already submitted a role request",
+          });
+        }
+
+        const requestData = {
+          userEmail,
+          userName,
+          requestType,
+          requestStatus: "pending",
+          requestTime: new Date(),
+        };
 
         const result = await roleRequestsCollection.insertOne(requestData);
-        res.send({ success: true, data: result });
+
+        res.send({
+          success: true,
+          message: "Role request submitted successfully",
+          data: result,
+        });
       } catch (error) {
-        console.log(error)
+        console.error("POST /role-request ERROR:", error);
         res.status(500).send({ error: "Failed to submit request" });
       }
     });
 
+
     // GET all role requests (Admin)
+    // app.get("/role-requests", async (req, res) => {
+    //   const requests = await roleRequestsCollection.find().sort({ requestTime: -1 }).toArray();
+    //   res.send(requests);
+    // });
     app.get("/role-requests", async (req, res) => {
-      const requests = await roleRequestsCollection.find().sort({ requestTime: -1 }).toArray();
+      const requests = await roleRequestsCollection
+        .find()
+        .sort({ requestTime: -1 })
+        .toArray();
+
       res.send(requests);
     });
+
 
 
     // Stripe payment 
@@ -816,7 +860,7 @@ async function run() {
 
 
 
-    // PATCH approve or reject request
+    // PATCH approve or reject request frist
     // app.patch("/role-request/:id", async (req, res) => {
     //   const { id } = req.params;       // role request ID (string)
     //   const { action } = req.body;     // "approve" or "reject"
@@ -911,46 +955,110 @@ async function run() {
     //     res.status(500).send({ error: "Internal server error" });
     //   }
     // });
+
+    // ===============second
+    // app.patch("/role-request/:id", verifyJWT, async (req, res) => {
+    //   try {
+    //     const userEmail = req.params.id; // email comes from URL
+    //     const { action } = req.body;
+
+    //     // Find request by email
+    //     const query = { userEmail: userEmail };
+
+    //     const request = await roleRequestsCollection.findOne(query);
+
+    //     if (!request) {
+    //       return res.status(404).send({ error: "Request not found" });
+    //     }
+
+    //     if (action === "approve") {
+    //       const updateData = {};
+
+    //       if (request.requestType === "chef") {
+    //         updateData.role = "chef";
+    //         updateData.chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
+    //       } else if (request.requestType === "admin") {
+    //         updateData.role = "admin";
+    //       }
+
+    //       // Update user role
+    //       await usersCollection.updateOne(
+    //         { email: userEmail },
+    //         { $set: updateData }
+    //       );
+
+    //       // Update request status
+    //       await roleRequestsCollection.updateOne(query, {
+    //         $set: { requestStatus: "approved" },
+    //       });
+    //     }
+
+    //     if (action === "reject") {
+    //       await roleRequestsCollection.updateOne(query, {
+    //         $set: { requestStatus: "rejected" },
+    //       });
+    //     }
+    //       console.log(action,userEmail)
+    //     res.send({ success: true, action });
+    //   } catch (error) {
+    //     console.error("PATCH /role-request ERROR:", error);
+    //     res.status(500).send({ error: "Internal server error" });
+    //   }
+    // });
+
     app.patch("/role-request/:id", verifyJWT, async (req, res) => {
       try {
-        const userEmail = req.params.id; // email comes from URL
+        const userEmail = req.params.id; // email from URL
         const { action } = req.body;
 
-        // Find request by email
-        const query = { userEmail: userEmail };
+        if (!["approve", "reject"].includes(action)) {
+          return res.status(400).send({ error: "Invalid action" });
+        }
 
-        const request = await roleRequestsCollection.findOne(query);
+        // Find request by email
+        const request = await roleRequestsCollection.findOne({ userEmail });
 
         if (!request) {
           return res.status(404).send({ error: "Request not found" });
         }
 
-        if (action === "approve") {
-          const updateData = {};
-
-          if (request.requestType === "chef") {
-            updateData.role = "chef";
-            updateData.chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
-          } else if (request.requestType === "admin") {
-            updateData.role = "admin";
-          }
-
-          // Update user role
-          await usersCollection.updateOne(
-            { email: userEmail },
-            { $set: updateData }
-          );
-
-          // Update request status
-          await roleRequestsCollection.updateOne(query, {
-            $set: { requestStatus: "approved" },
+        //  Prevent double processing
+        if (request.requestStatus !== "pending") {
+          return res.status(409).send({
+            error: "Request already processed",
           });
         }
 
+        // APPROVE
+        if (action === "approve") {
+          const updateUser = {};
+
+          if (request.requestType === "chef") {
+            updateUser.role = "chef";
+            updateUser.chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
+          }
+
+          if (request.requestType === "admin") {
+            updateUser.role = "admin";
+          }
+
+          await usersCollection.updateOne(
+            { email: userEmail },
+            { $set: updateUser }
+          );
+
+          await roleRequestsCollection.updateOne(
+            { userEmail },
+            { $set: { requestStatus: "approved" } }
+          );
+        }
+
+        // REJECT
         if (action === "reject") {
-          await roleRequestsCollection.updateOne(query, {
-            $set: { requestStatus: "rejected" },
-          });
+          await roleRequestsCollection.updateOne(
+            { userEmail },
+            { $set: { requestStatus: "rejected" } }
+          );
         }
 
         res.send({ success: true, action });
@@ -959,6 +1067,7 @@ async function run() {
         res.status(500).send({ error: "Internal server error" });
       }
     });
+
 
 
     // GET reviews for a specific user
