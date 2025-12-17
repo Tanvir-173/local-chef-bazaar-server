@@ -7,11 +7,11 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET);
 // const jwt = require("jsonwebtoken");
 const admin = require("firebase-admin");
 
-// const serviceAccount = require("./local-chef-bazaar-9fed2-firebase-adminsdk-fbsvc-aa7e96a24c.json");
+//const serviceAccount = require("./local-chef-bazaar-9fed2-firebase-adminsdk-fbsvc-aa7e96a24c.json");
 // const serviceAccount = require("./firebase-admin-key.json");
 
- const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
- const serviceAccount = JSON.parse(decoded);
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -102,7 +102,7 @@ const client = new MongoClient(uri, {
 // ----------------------------
 async function run() {
   try {
-    // await client.connect();
+    //await client.connect();
 
     const db = client.db("localchefbazaar_db");
     const mealsCollection = db.collection("meals");
@@ -154,7 +154,8 @@ async function run() {
 
     // Add user when they register or first login
     //========================================
-    app.post("/users",verifyJWT, async (req, res) => {
+    app.post("/users", async (req, res) => {
+      console.log('gtting hit from users')
       const user = req.body; // { name, email, photoURL, role? }
       try {
         // Check if user already exists
@@ -325,7 +326,7 @@ async function run() {
     //  get meals by chef email paermas
     // =========================
 
-    app.get("/meals/chef/:email",verifyJWT, async (req, res) => {
+    app.get("/meals/chef/:email", verifyJWT, async (req, res) => {
       const meals = await mealsCollection.find({ userEmail: req.params.email }).toArray();
       res.send(meals);
     });
@@ -346,7 +347,7 @@ async function run() {
     // delete meals
     // =============================
 
-    app.delete("/meals/:id",verifyJWT, async (req, res) => {
+    app.delete("/meals/:id", verifyJWT, async (req, res) => {
       const id = req.params.id;
       const result = await mealsCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
@@ -354,7 +355,7 @@ async function run() {
 
     // update meal api
     // ==================
-    app.put("/meals/:id",verifyJWT, async (req, res) => {
+    app.put("/meals/:id", verifyJWT, async (req, res) => {
       const id = req.params.id;
       const updatedMeal = req.body;
 
@@ -390,6 +391,7 @@ async function run() {
     //   }
     // });
     app.get("/reviews/top", async (req, res) => {
+      console.log('/reviews/top is geting hit')
       // console.log("hit from /reviews/top");
 
       try {
@@ -451,7 +453,7 @@ async function run() {
     //   const result = await reviewsCollection.insertOne(reviewData);
     //   res.send(result);
     // });
-    app.post("/reviews",verifyJWT, async (req, res) => {
+    app.post("/reviews", async (req, res) => {
       const reviewData = req.body;
 
       // Extract values cleanly (optional but clean)
@@ -494,7 +496,7 @@ async function run() {
     // ----------------------------
     //  POST Add to Favorites
     // ----------------------------
-    app.post("/favorites",verifyJWT, async (req, res) => {
+    app.post("/favorites", verifyJWT, async (req, res) => {
       const favorite = req.body;
 
       const exists = await favoritesCollection.findOne({
@@ -529,7 +531,7 @@ async function run() {
     // delete favourite
     // ===========================
 
-    app.delete("/favorites/:id", verifyJWT,async (req, res) => {
+    app.delete("/favorites/:id", verifyJWT, async (req, res) => {
       const id = req.params.id;
 
       try {
@@ -583,7 +585,7 @@ async function run() {
     // verfy-paymetnt
     // ===========================
     // PATCH order payment status
-    app.patch("/orders/:id/paid",verifyJWT, async (req, res) => {
+    app.patch("/orders/:id/paid", verifyJWT, async (req, res) => {
       const { id } = req.params; // order _id
       const { sessionId } = req.body; // optional, from Stripe
 
@@ -608,7 +610,7 @@ async function run() {
 
 
     // GET: Orders by user email
-    app.get("/orders/:email",verifyJWT, async (req, res) => {
+    app.get("/orders/:email", verifyJWT, async (req, res) => {
       const email = req.params.email;
       const orders = await ordersCollection.find({ userEmail: email }).toArray();
       res.send(orders);
@@ -628,7 +630,7 @@ async function run() {
     // });
 
     // GET all orders for a chef (not only pending)
-    app.get("/chef-orders/:chefId",verifyJWT, async (req, res) => {
+    app.get("/chef-orders/:chefId", verifyJWT, async (req, res) => {
       const { chefId } = req.params;
       // console.log("Chef ID received:", chefId);
 
@@ -680,7 +682,7 @@ async function run() {
     //   }
     // });
 
-    app.patch("/orders/:id",verifyJWT, async (req, res) => {
+    app.patch("/orders/:id", verifyJWT, async (req, res) => {
       console.log('"/orders/:id"')
       const { id } = req.params;
       const { orderStatus, deliveryTime } = req.body;
@@ -744,10 +746,12 @@ async function run() {
       try {
         requestData.requestStatus = "pending";
         requestData.requestTime = new Date();
+        console.log(requestData)
 
         const result = await roleRequestsCollection.insertOne(requestData);
         res.send({ success: true, data: result });
       } catch (error) {
+        console.log(error)
         res.status(500).send({ error: "Failed to submit request" });
       }
     });
@@ -786,7 +790,7 @@ async function run() {
     //       res.send({ url: session.url})
 
     // });
-    app.post("/create-checkout-session",verifyJWT, async (req, res) => {
+    app.post("/create-checkout-session", verifyJWT, async (req, res) => {
       const { price, orderId, userEmail } = req.body;
       const amount = parseInt(price) * 100; // convert to cents
 
@@ -858,15 +862,62 @@ async function run() {
     // });
 
     // PATCH approve or reject request
+    // app.patch("/role-request/:id", verifyJWT, async (req, res) => {
+    //   try {
+    //     const { id } = req.params;
+    //     const { action } = req.body;
+
+    //     // console.log("PATCH received ID:", id);
+
+    //     // Since your DB uses string IDs, always match by string
+    //     const query = { _id: id };
+
+    //     const request = await roleRequestsCollection.findOne(query);
+    //     console.log(request)
+
+    //     if (!request) {
+    //       return res.status(404).send({ error: "Request not found" });
+    //     }
+
+    //     if (action === "approve") {
+    //       const updateData = {};
+
+    //       if (request.requestType === "chef") {
+    //         updateData.role = "chef";
+    //         updateData.chefId = `chef-${Math.floor(1000 + Math.random() * 9000)}`;
+    //       } else if (request.requestType === "admin") {
+    //         updateData.role = "admin";
+    //       }
+
+    //       await usersCollection.updateOne(
+    //         { email: request.userEmail },
+    //         { $set: updateData }
+    //       );
+
+    //       await roleRequestsCollection.updateOne(query, {
+    //         $set: { requestStatus: "approved" },
+    //       });
+    //     }
+
+    //     if (action === "reject") {
+    //       await roleRequestsCollection.updateOne(query, {
+    //         $set: { requestStatus: "rejected" },
+    //       });
+    //     }
+
+    //     res.send({ success: true, action });
+    //   } catch (error) {
+    //     console.error("PATCH /role-request ERROR:", error);
+    //     res.status(500).send({ error: "Internal server error" });
+    //   }
+    // });
     app.patch("/role-request/:id", verifyJWT, async (req, res) => {
       try {
-        const { id } = req.params;
+        const userEmail = req.params.id; // email comes from URL
         const { action } = req.body;
 
-        // console.log("PATCH received ID:", id);
-
-        // Since your DB uses string IDs, always match by string
-        const query = { _id: id };
+        // Find request by email
+        const query = { userEmail: userEmail };
 
         const request = await roleRequestsCollection.findOne(query);
 
@@ -884,11 +935,13 @@ async function run() {
             updateData.role = "admin";
           }
 
+          // Update user role
           await usersCollection.updateOne(
-            { email: request.userEmail },
+            { email: userEmail },
             { $set: updateData }
           );
 
+          // Update request status
           await roleRequestsCollection.updateOne(query, {
             $set: { requestStatus: "approved" },
           });
@@ -935,7 +988,7 @@ async function run() {
     });
 
     // PATCH review by _id
-    app.patch("/reviews/:id",verifyJWT, async (req, res) => {
+    app.patch("/reviews/:id", verifyJWT, async (req, res) => {
       const { id } = req.params;
       const { rating, comment } = req.body;
 
@@ -992,9 +1045,10 @@ async function run() {
     // ----------------------------
     // Server Ping
     // ----------------------------
-    await client.db("admin").command({ ping: 1 });
-    console.log("Successfully Connected to MongoDB!");
-  } finally {
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Successfully Connected to MongoDB!");
+  }
+  finally {
     // Do not close connection
   }
 }
